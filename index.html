@@ -1820,6 +1820,7 @@
     state.gcalTokenExpiresAt = null;
     state.gcalEventsByMonth = {};
     gcalTokenClient = null;
+    gcalCalendarIdsCache = null;
     storageSet('gcal-client-id', null);
     render();
   }
@@ -1841,8 +1842,26 @@
     state.gcalAccessToken = null;
     state.gcalTokenExpiresAt = null;
     state.gcalEventsByMonth = {};
+    gcalCalendarIdsCache = null;
     showToast('Google連携を解除しました');
     render();
+  }
+
+  var gcalCalendarIdsCache = null;
+
+  function fetchGcalCalendarIds(){
+    if(gcalCalendarIdsCache) return Promise.resolve(gcalCalendarIdsCache);
+    return fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader', {
+      headers: { 'Authorization': 'Bearer ' + state.gcalAccessToken }
+    }).then(function(res){
+      if(!res.ok){ var err = new Error('HTTP '+res.status); err.status = res.status; throw err; }
+      return res.json();
+    }).then(function(data){
+      var ids = (data.items||[]).filter(function(c){ return c.selected!==false; }).map(function(c){ return c.id; });
+      if(ids.indexOf('primary')===-1) ids.unshift('primary');
+      gcalCalendarIdsCache = ids;
+      return ids;
+    });
   }
 
   function loadGCalMonth(year, month, force){
@@ -1854,17 +1873,21 @@
     render();
     var startDate = new Date(year, month, 1);
     var endDate = new Date(year, month+1, 1);
-    var url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
-      + '?timeMin=' + encodeURIComponent(startDate.toISOString())
-      + '&timeMax=' + encodeURIComponent(endDate.toISOString())
-      + '&singleEvents=true&orderBy=startTime&maxResults=250';
-    fetch(url, { headers: { 'Authorization': 'Bearer ' + state.gcalAccessToken } })
-      .then(function(res){
-        if(!res.ok){ var err = new Error('HTTP '+res.status); err.status = res.status; throw err; }
-        return res.json();
-      })
-      .then(function(data){
-        var map = {};
+    var timeMin = encodeURIComponent(startDate.toISOString());
+    var timeMax = encodeURIComponent(endDate.toISOString());
+
+    fetchGcalCalendarIds().then(function(calendarIds){
+      return Promise.all(calendarIds.map(function(calId){
+        var url = 'https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId)+'/events'
+          + '?timeMin='+timeMin+'&timeMax='+timeMax+'&singleEvents=true&orderBy=startTime&maxResults=250';
+        return fetch(url, { headers: { 'Authorization': 'Bearer ' + state.gcalAccessToken } })
+          .then(function(res){ return res.ok ? res.json() : { items: [] }; })
+          .catch(function(){ return { items: [] }; });
+      }));
+    }).then(function(results){
+      var map = {};
+      var total = 0;
+      results.forEach(function(data){
         (data.items||[]).forEach(function(ev){
           if(ev.status==='cancelled') return;
           var startObj = ev.start||{};
@@ -1883,27 +1906,28 @@
           if(!dateStr) return;
           if(!map[dateStr]) map[dateStr]=[];
           map[dateStr].push({ id: ev.id, title: ev.summary || '(無題の予定)', allDay: allDay, time: time });
+          total++;
         });
-        state.gcalEventsByMonth[key] = map;
-        state.gcalLoading = false;
-        state.gcalLastFetchInfo = { count: (data.items||[]).length, raw: (data.items||[]).length, range: startDate.toLocaleDateString('ja-JP')+' 〜 '+endDate.toLocaleDateString('ja-JP') };
-        render();
-      })
-      .catch(function(e){
-        console.error('gcal load failed', e);
-        state.gcalLoading = false;
-        state.gcalLastFetchInfo = { error: (e && e.status) ? ('HTTPエラー '+e.status) : ('通信エラー: '+(e&&e.message||e)) };
-        if(e && e.status===401){
-          state.gcalConnected = false;
-          state.gcalAccessToken = null;
-          state.gcalError = 'Googleとの接続が切れました。再度ログインしてください';
-        } else if(e && e.status===403){
-          state.gcalError = 'アクセス権限が不足しています（スコープの設定をご確認ください）';
-        } else {
-          state.gcalError = 'Googleカレンダーの取得に失敗しました';
-        }
-        render();
       });
+      state.gcalEventsByMonth[key] = map;
+      state.gcalLoading = false;
+      state.gcalLastFetchInfo = { count: total, range: startDate.toLocaleDateString('ja-JP')+' 〜 '+endDate.toLocaleDateString('ja-JP')+'（'+results.length+'カレンダー分）' };
+      render();
+    }).catch(function(e){
+      console.error('gcal load failed', e);
+      state.gcalLoading = false;
+      state.gcalLastFetchInfo = { error: (e && e.status) ? ('HTTPエラー '+e.status) : ('通信エラー: '+(e&&e.message||e)) };
+      if(e && e.status===401){
+        state.gcalConnected = false;
+        state.gcalAccessToken = null;
+        state.gcalError = 'Googleとの接続が切れました。再度ログインしてください';
+      } else if(e && e.status===403){
+        state.gcalError = 'アクセス権限が不足しています（スコープの設定をご確認ください）';
+      } else {
+        state.gcalError = 'Googleカレンダーの取得に失敗しました';
+      }
+      render();
+    });
   }
 
   function pushToGoogleCalendar(kind, itemId){
