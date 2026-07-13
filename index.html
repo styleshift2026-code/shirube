@@ -1868,14 +1868,19 @@
         (data.items||[]).forEach(function(ev){
           if(ev.status==='cancelled') return;
           var startObj = ev.start||{};
-          var dateStr = startObj.date || (startObj.dateTime ? startObj.dateTime.slice(0,10) : null);
-          if(!dateStr) return;
           var allDay = !!startObj.date;
-          var time = null;
-          if(!allDay && startObj.dateTime){
+          var dateStr = null, time = null;
+          if(allDay){
+            dateStr = startObj.date;
+          } else if(startObj.dateTime){
+            // Parse via Date so both "+09:00"-offset and UTC "Z" timestamps
+            // resolve to the correct local calendar day, instead of naively
+            // slicing the first 10 characters of the raw string.
             var dt = new Date(startObj.dateTime);
+            dateStr = dt.getFullYear()+'-'+pad(dt.getMonth()+1)+'-'+pad(dt.getDate());
             time = pad(dt.getHours())+':'+pad(dt.getMinutes());
           }
+          if(!dateStr) return;
           if(!map[dateStr]) map[dateStr]=[];
           map[dateStr].push({ id: ev.id, title: ev.summary || '(無題の予定)', allDay: allDay, time: time });
         });
