@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shirube-v1';
+const CACHE_NAME = 'shirube-v2';
 const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function(event){
@@ -17,8 +17,23 @@ self.addEventListener('activate', function(event){
   self.clients.claim();
 });
 
+// HTML (navigation) requests: always try the network first so updates show up
+// immediately; fall back to the cache only when offline.
 self.addEventListener('fetch', function(event){
   if(event.request.method !== 'GET') return;
+  var isNavigation = event.request.mode === 'navigate' || event.request.destination === 'document';
+
+  if(isNavigation){
+    event.respondWith(
+      fetch(event.request).then(function(res){
+        var resClone = res.clone();
+        caches.open(CACHE_NAME).then(function(cache){ cache.put(event.request, resClone); });
+        return res;
+      }).catch(function(){ return caches.match(event.request).then(function(c){ return c || caches.match('./index.html'); }); })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then(function(cached){
       if(cached) return cached;
@@ -26,7 +41,7 @@ self.addEventListener('fetch', function(event){
         var resClone = res.clone();
         caches.open(CACHE_NAME).then(function(cache){ cache.put(event.request, resClone); });
         return res;
-      }).catch(function(){ return caches.match('./index.html'); });
+      });
     })
   );
 });
