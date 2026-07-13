@@ -568,9 +568,7 @@
     <button class="tab-btn" data-tab="tasks"><span class="ico">✓</span><span class="lbl">タスク</span></button>
     <button class="tab-btn" data-tab="calendar"><span class="ico">▦</span><span class="lbl">カレンダー</span></button>
     <button class="tab-btn" data-tab="vision"><span class="ico">✺</span><span class="lbl">Vision</span></button>
-    <button class="tab-btn" data-tab="books"><span class="ico">✎</span><span class="lbl">読書</span></button>
-    <button class="tab-btn" data-tab="people"><span class="ico">◎</span><span class="lbl">人物</span></button>
-    <button class="tab-btn" data-tab="reflections"><span class="ico">◈</span><span class="lbl">振り返り</span></button>
+    <button class="tab-btn" data-tab="matome"><span class="ico">◈</span><span class="lbl">まとめ</span></button>
   </nav>
 
   <button id="voiceFab" class="voice-fab hidden" title="入力欄を選んでタップすると音声入力できます">🎤</button>
@@ -602,6 +600,7 @@
     dailyRoutines: [],
     routineCompletions: {},
     activeTab: 'today',
+    matomeSubTab: 'reflections',
     categoryFilter: 'all',
     showLaunchScreen: true,
     statusFilter: 'all',
@@ -784,9 +783,7 @@
     else if(state.activeTab==='tasks') main.innerHTML = renderTasks();
     else if(state.activeTab==='calendar') main.innerHTML = renderCalendar();
     else if(state.activeTab==='vision') main.innerHTML = renderVision();
-    else if(state.activeTab==='books') main.innerHTML = renderBooks();
-    else if(state.activeTab==='people') main.innerHTML = renderPeople();
-    else if(state.activeTab==='reflections') main.innerHTML = renderReflections();
+    else if(state.activeTab==='matome') main.innerHTML = renderMatome();
     attachHandlers();
   }
 
@@ -857,7 +854,7 @@
     document.getElementById('tapeRow').innerHTML = html;
   }
 
-  var SANTEN_ONLY_TABS = ['vision','books','people'];
+  var SANTEN_ONLY_TABS = ['vision'];
 
   function renderTabBar(){
     var showSantenTabs = (state.categoryFilter==='santen' || state.categoryFilter==='all');
@@ -1222,6 +1219,23 @@
     return html;
   }
 
+  /* ---------- まとめ（振り返り／読書／人物） ---------- */
+  var MATOME_TABS = [['reflections','振り返り'],['books','読書'],['people','人物']];
+  var MATOME_LABEL = { reflections:'振り返り', books:'読書メモ', people:'人物メモ' };
+
+  function renderMatome(){
+    var html = '<div class="segmented" id="matomeSeg">';
+    MATOME_TABS.forEach(function(p){
+      html += '<button data-matome="'+p[0]+'" class="'+(state.matomeSubTab===p[0]?'active':'')+'">'+p[1]+'</button>';
+    });
+    html += '</div>';
+    html += '<div class="section-title"><span class="bar"></span>'+esc(MATOME_LABEL[state.matomeSubTab])+'</div>';
+    if(state.matomeSubTab==='books') html += renderBooks();
+    else if(state.matomeSubTab==='people') html += renderPeople();
+    else html += renderReflections();
+    return html;
+  }
+
   /* ---------- Books / People ---------- */
   function renderBooks(){
     var list = filteredTasks(state.books).slice().sort(function(a,b){ return b.createdAt-a.createdAt; });
@@ -1368,6 +1382,17 @@
       });
     }
 
+    var matomeSeg = document.getElementById('matomeSeg');
+    if(matomeSeg){
+      matomeSeg.querySelectorAll('button').forEach(function(b){
+        b.addEventListener('click', function(){
+          state.matomeSubTab = b.getAttribute('data-matome');
+          state.showBookForm=false; state.showPeopleForm=false; state.deleteArmed=null;
+          render();
+        });
+      });
+    }
+
     bindClick('show-book-form', function(){ state.showBookForm=true; render(); });
     var cancelBookBtn = document.getElementById('cancelBookBtn');
     if(cancelBookBtn) cancelBookBtn.addEventListener('click', function(){ state.showBookForm=false; render(); });
@@ -1465,7 +1490,7 @@
     else if(action==='delete-book-confirm'){ deleteBook(id); }
     else if(action==='delete-person'){ state.deleteArmed='person-'+id; render(); }
     else if(action==='delete-person-confirm'){ deletePerson(id); }
-    else if(action==='goto-reflections'){ state.activeTab='reflections'; render(); }
+    else if(action==='goto-reflections'){ state.activeTab='matome'; state.matomeSubTab='reflections'; render(); }
     else if(action==='delete-reflection'){ state.deleteArmed='reflection-'+id; render(); }
     else if(action==='delete-reflection-confirm'){ deleteReflection(id); }
     else if(action==='delete-schedule'){ state.deleteArmed='sched-'+id; render(); }
