@@ -632,7 +632,8 @@
     gcalEventsByMonth: {},
     gcalLoading: false,
     gcalError: null,
-    gcalStatus: {}
+    gcalStatus: {},
+    gcalLastFetchInfo: null
   };
 
   function todayStr(){
@@ -1174,6 +1175,13 @@
         + '<button class="btn small secondary" data-action="gcal-refresh" '+(state.gcalLoading?'disabled':'')+'>'+(state.gcalLoading?'更新中…':'⟳ 更新')+'</button>'
         + '<button class="btn small secondary" data-action="gcal-disconnect">連携解除</button>'
         + '</div>';
+      if(state.gcalLastFetchInfo){
+        if(state.gcalLastFetchInfo.error){
+          html += '<div class="gcal-status">診断: 取得失敗（'+esc(state.gcalLastFetchInfo.error)+'）</div>';
+        } else {
+          html += '<div class="gcal-status">診断: '+state.gcalLastFetchInfo.range+' の範囲で '+state.gcalLastFetchInfo.count+' 件取得</div>';
+        }
+      }
     }
     if(state.gcalError){ html += '<div class="gcal-banner error" style="margin-top:8px;">'+esc(state.gcalError)+'</div>'; }
     html += '</div>';
@@ -1873,15 +1881,19 @@
         });
         state.gcalEventsByMonth[key] = map;
         state.gcalLoading = false;
+        state.gcalLastFetchInfo = { count: (data.items||[]).length, raw: (data.items||[]).length, range: startDate.toLocaleDateString('ja-JP')+' 〜 '+endDate.toLocaleDateString('ja-JP') };
         render();
       })
       .catch(function(e){
         console.error('gcal load failed', e);
         state.gcalLoading = false;
+        state.gcalLastFetchInfo = { error: (e && e.status) ? ('HTTPエラー '+e.status) : ('通信エラー: '+(e&&e.message||e)) };
         if(e && e.status===401){
           state.gcalConnected = false;
           state.gcalAccessToken = null;
           state.gcalError = 'Googleとの接続が切れました。再度ログインしてください';
+        } else if(e && e.status===403){
+          state.gcalError = 'アクセス権限が不足しています（スコープの設定をご確認ください）';
         } else {
           state.gcalError = 'Googleカレンダーの取得に失敗しました';
         }
