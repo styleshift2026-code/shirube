@@ -1857,8 +1857,14 @@
       if(!res.ok){ var err = new Error('HTTP '+res.status); err.status = res.status; throw err; }
       return res.json();
     }).then(function(data){
-      var ids = (data.items||[]).filter(function(c){ return c.selected!==false; }).map(function(c){ return c.id; });
-      if(ids.indexOf('primary')===-1) ids.unshift('primary');
+      var items = data.items || [];
+      var ids = items.filter(function(c){ return c.selected!==false; }).map(function(c){ return c.id; });
+      // The user's own calendar is usually already listed here (under their
+      // email address, flagged primary:true) — only fall back to the literal
+      // "primary" alias if it's genuinely missing, otherwise we'd fetch the
+      // same calendar twice under two different ids and duplicate events.
+      var hasPrimary = items.some(function(c){ return c.primary; }) || ids.indexOf('primary')!==-1;
+      if(!hasPrimary) ids.unshift('primary');
       gcalCalendarIdsCache = ids;
       return ids;
     });
@@ -1887,9 +1893,15 @@
     }).then(function(results){
       var map = {};
       var total = 0;
+      var seenIds = {};
       results.forEach(function(data){
         (data.items||[]).forEach(function(ev){
           if(ev.status==='cancelled') return;
+          // The same event can be returned by more than one calendar (e.g.
+          // an event you're invited to appears on both your own calendar
+          // and the organizer's), so skip anything we've already added.
+          if(seenIds[ev.id]) return;
+          seenIds[ev.id] = true;
           var startObj = ev.start||{};
           var allDay = !!startObj.date;
           var dateStr = null, time = null;
