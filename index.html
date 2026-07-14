@@ -921,9 +921,12 @@
     var html = '<div class="greeting">今日も一日おつかれさまです</div>';
 
     html += '<div class="quick-add">'
-      + '<input type="text" id="qaTitle" placeholder="今日やることを入力" style="flex:1;">'
+      + '<input type="text" id="qaTitle" placeholder="やることを入力" style="flex:1;">'
       + '</div>'
-      + '<button class="btn block" id="qaAdd" style="margin-top:-8px;margin-bottom:16px;">＋ 今日のタスクに追加</button>';
+      + '<div class="quick-add">'
+      + '<input type="date" id="qaDate" value="'+today+'" style="flex:1;">'
+      + '</div>'
+      + '<button class="btn block" id="qaAdd" style="margin-top:-8px;margin-bottom:16px;">＋ タスクに追加</button>';
 
     html += '<div class="section-title"><span class="bar"></span>今日のタスク</div>';
     if(combined.length===0){
@@ -1383,7 +1386,9 @@
         var titleEl = document.getElementById('qaTitle');
         var title = titleEl.value.trim();
         if(!title){ showToast('タスク名を入力してください'); return; }
-        addTask(title, currentCategory(), todayStr(), '');
+        var dateEl = document.getElementById('qaDate');
+        var due = (dateEl && dateEl.value) ? dateEl.value : todayStr();
+        addTask(title, currentCategory(), due, '');
       });
     }
     var qsAdd = document.getElementById('qsAdd');
