@@ -623,7 +623,7 @@
     scheduleEditOpen: {},
     scheduleReflectOpen: {},
     openNotes: {},
-    reflectionDraft: { date:'', purpose:'', feeling:'', hansei:'', naisei:'' },
+    drafts: null,
     gcalClientId: null,
     gcalConnected: false,
     gcalConnecting: false,
@@ -691,6 +691,33 @@
     ['issues','課題','今感じている課題や乗り越えたいこと']
   ];
 
+  // すべての入力途中フォームの下書き。ここに載っているものは1文字入力するたびに
+  // localStorageへ保存されるので、アプリが落ちても再度開けば復元される。
+  function defaultDrafts(){
+    return {
+      qa: { title:'', date:'' },
+      qs: { title:'', date:'', time:'', timeEnd:'', location:'' },
+      task: { title:'', due:'', memo:'' },
+      book: { title:'', author:'', memo:'' },
+      person: { name:'', relation:'', memo:'' },
+      reflection: { date:'', purpose:'', feeling:'', hansei:'', naisei:'' },
+      vision: {}
+    };
+  }
+  function saveDrafts(){ storageSet('drafts', state.drafts); }
+  function trackDraftInput(el, section, field){
+    if(!el) return;
+    el.addEventListener('input', function(){
+      state.drafts[section][field] = el.value;
+      saveDrafts();
+    });
+  }
+  function clearDraft(section){
+    var fresh = defaultDrafts();
+    state.drafts[section] = fresh[section];
+    saveDrafts();
+  }
+
   function loadAll(){
     var defaultVision = {};
     VISION_TERMS.forEach(function(t){ defaultVision[t[0]] = { text:'', updatedAt:null }; });
@@ -705,6 +732,17 @@
     state.dailyRoutines = storageGet('daily-routines', []);
     state.routineCompletions = storageGet('routine-completions', {});
     state.gcalClientId = storageGet('gcal-client-id', null);
+    var loadedDrafts = storageGet('drafts', null);
+    var fallbackDrafts = defaultDrafts();
+    state.drafts = loadedDrafts ? Object.assign(fallbackDrafts, loadedDrafts, {
+      qa: Object.assign(fallbackDrafts.qa, loadedDrafts.qa),
+      qs: Object.assign(fallbackDrafts.qs, loadedDrafts.qs),
+      task: Object.assign(fallbackDrafts.task, loadedDrafts.task),
+      book: Object.assign(fallbackDrafts.book, loadedDrafts.book),
+      person: Object.assign(fallbackDrafts.person, loadedDrafts.person),
+      reflection: Object.assign(fallbackDrafts.reflection, loadedDrafts.reflection),
+      vision: loadedDrafts.vision || {}
+    }) : fallbackDrafts;
 
     // 初回のみ、毎日のタスクの初期セットを用意する
     if(state.dailyRoutines.length===0){
@@ -921,10 +959,10 @@
     var html = '<div class="greeting">今日も一日おつかれさまです</div>';
 
     html += '<div class="quick-add">'
-      + '<input type="text" id="qaTitle" placeholder="やることを入力" style="flex:1;">'
+      + '<input type="text" id="qaTitle" placeholder="やることを入力" value="'+esc(state.drafts.qa.title)+'" style="flex:1;">'
       + '</div>'
       + '<div class="quick-add">'
-      + '<input type="date" id="qaDate" value="'+today+'" style="flex:1;">'
+      + '<input type="date" id="qaDate" value="'+esc(state.drafts.qa.date||today)+'" style="flex:1;">'
       + '</div>'
       + '<button class="btn block" id="qaAdd" style="margin-top:-8px;margin-bottom:16px;">＋ タスクに追加</button>';
 
@@ -937,13 +975,13 @@
 
     html += '<div class="section-title"><span class="bar"></span>予定を追加</div>';
     html += '<div class="form-card">'
-      + '<label class="field-label">タイトル</label><input type="text" id="qsTitle" placeholder="例）ミーティング">'
-      + '<label class="field-label">日付</label><input type="date" id="qsDate" value="'+today+'">'
+      + '<label class="field-label">タイトル</label><input type="text" id="qsTitle" placeholder="例）ミーティング" value="'+esc(state.drafts.qs.title)+'">'
+      + '<label class="field-label">日付</label><input type="date" id="qsDate" value="'+esc(state.drafts.qs.date||today)+'">'
       + '<div class="btn-row">'
-      + '<div style="flex:1;"><label class="field-label">開始時刻</label><input type="time" id="qsTime"></div>'
-      + '<div style="flex:1;"><label class="field-label">終了時刻（任意）</label><input type="time" id="qsTimeEnd"></div>'
+      + '<div style="flex:1;"><label class="field-label">開始時刻</label><input type="time" id="qsTime" value="'+esc(state.drafts.qs.time)+'"></div>'
+      + '<div style="flex:1;"><label class="field-label">終了時刻（任意）</label><input type="time" id="qsTimeEnd" value="'+esc(state.drafts.qs.timeEnd)+'"></div>'
       + '</div>'
-      + '<label class="field-label">場所（任意）</label><input type="text" id="qsLocation" placeholder="例）〇〇会議室、オンライン">'
+      + '<label class="field-label">場所（任意）</label><input type="text" id="qsLocation" placeholder="例）〇〇会議室、オンライン" value="'+esc(state.drafts.qs.location)+'">'
       + '<button class="btn block" id="qsAdd">＋ 予定を追加</button>'
       + '</div>';
 
@@ -958,11 +996,11 @@
 
     html += '<div class="section-title"><span class="bar"></span>振り返り</div>';
     html += '<div class="form-card">'
-      + '<label class="field-label">日付</label><input type="date" id="reflectionDate" value="'+esc(state.reflectionDraft.date||today)+'">'
-      + '<label class="field-label">目的</label><textarea id="reflectionPurpose" placeholder="何のために取り組んだか">'+esc(state.reflectionDraft.purpose)+'</textarea>'
-      + '<label class="field-label">感じた・思ったこと</label><textarea id="reflectionFeeling" placeholder="感じたこと、心が動いたこと">'+esc(state.reflectionDraft.feeling)+'</textarea>'
-      + '<label class="field-label">反省</label><textarea id="reflectionHansei" placeholder="うまくいかなかったこと、改善したいこと">'+esc(state.reflectionDraft.hansei)+'</textarea>'
-      + '<label class="field-label">内省</label><textarea id="reflectionNaisei" placeholder="そこから見えてきた自分の傾向や気づき">'+esc(state.reflectionDraft.naisei)+'</textarea>'
+      + '<label class="field-label">日付</label><input type="date" id="reflectionDate" value="'+esc(state.drafts.reflection.date||today)+'">'
+      + '<label class="field-label">目的</label><textarea id="reflectionPurpose" placeholder="何のために取り組んだか">'+esc(state.drafts.reflection.purpose)+'</textarea>'
+      + '<label class="field-label">感じた・思ったこと</label><textarea id="reflectionFeeling" placeholder="感じたこと、心が動いたこと">'+esc(state.drafts.reflection.feeling)+'</textarea>'
+      + '<label class="field-label">反省</label><textarea id="reflectionHansei" placeholder="うまくいかなかったこと、改善したいこと">'+esc(state.drafts.reflection.hansei)+'</textarea>'
+      + '<label class="field-label">内省</label><textarea id="reflectionNaisei" placeholder="そこから見えてきた自分の傾向や気づき">'+esc(state.drafts.reflection.naisei)+'</textarea>'
       + '<button class="btn block" id="reflectionSave">振り返りを保存</button>'
       + '</div>';
     html += '<button class="link-btn" data-action="goto-reflections" style="margin-bottom:16px;display:inline-block;">過去の振り返りをすべて見る →</button>';
@@ -1139,9 +1177,9 @@
       html += '<button class="add-toggle" data-action="show-task-form">＋ 新しいタスクを追加</button>';
     } else {
       html += '<div class="form-card">'
-        + '<label class="field-label">タスク名</label><input type="text" id="newTaskTitle" placeholder="例）来月の資料を準備する">'
-        + '<label class="field-label">期限（任意）</label><input type="date" id="newTaskDue">'
-        + '<label class="field-label">メモ（任意）</label><textarea id="newTaskMemo" placeholder="補足があれば"></textarea>'
+        + '<label class="field-label">タスク名</label><input type="text" id="newTaskTitle" placeholder="例）来月の資料を準備する" value="'+esc(state.drafts.task.title)+'">'
+        + '<label class="field-label">期限（任意）</label><input type="date" id="newTaskDue" value="'+esc(state.drafts.task.due)+'">'
+        + '<label class="field-label">メモ（任意）</label><textarea id="newTaskMemo" placeholder="補足があれば">'+esc(state.drafts.task.memo)+'</textarea>'
         + '<div class="btn-row" style="margin-top:12px;">'
         + '<button class="btn" id="saveTaskBtn">追加する</button>'
         + '<button class="btn secondary" id="cancelTaskBtn">キャンセル</button>'
@@ -1284,9 +1322,11 @@
     VISION_TERMS.forEach(function(term){
       var key = term[0], label = term[1], placeholder = term[2];
       var v = state.vision[key] || {text:'',updatedAt:null};
+      var draftText = state.drafts.vision[key];
+      var shownText = (draftText!==undefined) ? draftText : v.text;
       html += '<div class="card vision-card vision-term-'+key+'">'
         + '<div class="vision-head"><span class="vision-term-label">'+esc(label)+'</span>' + (v.updatedAt ? '<span class="vision-updated">更新: '+esc(fmtDateTime(v.updatedAt))+'</span>' : '<span class="vision-updated">未保存</span>') + '</div>'
-        + '<textarea data-vision-term="'+key+'" placeholder="'+esc(placeholder)+'" style="min-height:88px;">'+esc(v.text)+'</textarea>'
+        + '<textarea data-vision-term="'+key+'" placeholder="'+esc(placeholder)+'" style="min-height:88px;">'+esc(shownText)+'</textarea>'
         + '<div class="btn-row" style="margin-top:10px;">'
         + '<button class="btn small" data-action="vision-save" data-term="'+key+'">保存</button>'
         + '</div></div>';
@@ -1319,9 +1359,9 @@
       html += '<button class="add-toggle" data-action="show-book-form">＋ 読書メモを追加</button>';
     } else {
       html += '<div class="form-card">'
-        + '<label class="field-label">タイトル</label><input type="text" id="newBookTitle" placeholder="書籍名">'
-        + '<label class="field-label">著者（任意）</label><input type="text" id="newBookAuthor" placeholder="著者名">'
-        + '<label class="field-label">気づき・メモ</label><textarea id="newBookMemo" placeholder="学びや引用しておきたい箇所など"></textarea>'
+        + '<label class="field-label">タイトル</label><input type="text" id="newBookTitle" placeholder="書籍名" value="'+esc(state.drafts.book.title)+'">'
+        + '<label class="field-label">著者（任意）</label><input type="text" id="newBookAuthor" placeholder="著者名" value="'+esc(state.drafts.book.author)+'">'
+        + '<label class="field-label">気づき・メモ</label><textarea id="newBookMemo" placeholder="学びや引用しておきたい箇所など">'+esc(state.drafts.book.memo)+'</textarea>'
         + '<div class="btn-row" style="margin-top:12px;"><button class="btn" id="saveBookBtn">追加する</button><button class="btn secondary" id="cancelBookBtn">キャンセル</button></div>'
         + '</div>';
     }
@@ -1352,9 +1392,9 @@
       html += '<button class="add-toggle" data-action="show-people-form">＋ 人物メモを追加</button>';
     } else {
       html += '<div class="form-card">'
-        + '<label class="field-label">お名前・呼び方</label><input type="text" id="newPersonName" placeholder="例）〇〇さん">'
-        + '<label class="field-label">関係性（任意）</label><input type="text" id="newPersonRelation" placeholder="例）お世話になっている方">'
-        + '<label class="field-label">メモ</label><textarea id="newPersonMemo" placeholder="話した内容、印象に残ったことなど"></textarea>'
+        + '<label class="field-label">お名前・呼び方</label><input type="text" id="newPersonName" placeholder="例）〇〇さん" value="'+esc(state.drafts.person.name)+'">'
+        + '<label class="field-label">関係性（任意）</label><input type="text" id="newPersonRelation" placeholder="例）お世話になっている方" value="'+esc(state.drafts.person.relation)+'">'
+        + '<label class="field-label">メモ</label><textarea id="newPersonMemo" placeholder="話した内容、印象に残ったことなど">'+esc(state.drafts.person.memo)+'</textarea>'
         + '<div class="btn-row" style="margin-top:12px;"><button class="btn" id="savePersonBtn">追加する</button><button class="btn secondary" id="cancelPersonBtn">キャンセル</button></div>'
         + '</div>';
     }
@@ -1381,6 +1421,8 @@
   function attachHandlers(){
     var main = document.getElementById('main-content');
 
+    trackDraftInput(document.getElementById('qaTitle'), 'qa', 'title');
+    trackDraftInput(document.getElementById('qaDate'), 'qa', 'date');
     var qaAdd = document.getElementById('qaAdd');
     if(qaAdd){
       qaAdd.addEventListener('click', function(){
@@ -1389,9 +1431,15 @@
         if(!title){ showToast('タスク名を入力してください'); return; }
         var dateEl = document.getElementById('qaDate');
         var due = (dateEl && dateEl.value) ? dateEl.value : todayStr();
+        clearDraft('qa');
         addTask(title, currentCategory(), due, '');
       });
     }
+    trackDraftInput(document.getElementById('qsTitle'), 'qs', 'title');
+    trackDraftInput(document.getElementById('qsDate'), 'qs', 'date');
+    trackDraftInput(document.getElementById('qsTime'), 'qs', 'time');
+    trackDraftInput(document.getElementById('qsTimeEnd'), 'qs', 'timeEnd');
+    trackDraftInput(document.getElementById('qsLocation'), 'qs', 'location');
     var qsAdd = document.getElementById('qsAdd');
     if(qsAdd){
       qsAdd.addEventListener('click', function(){
@@ -1402,18 +1450,15 @@
         var time = document.getElementById('qsTime').value || null;
         var timeEnd = document.getElementById('qsTimeEnd').value || null;
         var location = document.getElementById('qsLocation').value.trim();
+        clearDraft('qs');
         addSchedule(title, date, time, timeEnd, location, currentCategory());
       });
     }
-    var reflectionFieldIds = { date:'reflectionDate', purpose:'reflectionPurpose', feeling:'reflectionFeeling', hansei:'reflectionHansei', naisei:'reflectionNaisei' };
-    Object.keys(reflectionFieldIds).forEach(function(key){
-      var el = document.getElementById(reflectionFieldIds[key]);
-      if(el){
-        el.addEventListener('input', function(){
-          state.reflectionDraft[key] = el.value;
-        });
-      }
-    });
+    trackDraftInput(document.getElementById('reflectionDate'), 'reflection', 'date');
+    trackDraftInput(document.getElementById('reflectionPurpose'), 'reflection', 'purpose');
+    trackDraftInput(document.getElementById('reflectionFeeling'), 'reflection', 'feeling');
+    trackDraftInput(document.getElementById('reflectionHansei'), 'reflection', 'hansei');
+    trackDraftInput(document.getElementById('reflectionNaisei'), 'reflection', 'naisei');
     var reflectionSave = document.getElementById('reflectionSave');
     if(reflectionSave){
       reflectionSave.addEventListener('click', function(){
@@ -1428,7 +1473,7 @@
         state.reflections = state.reflections.concat([entry]);
         var result = storageSet('reflections', state.reflections);
         if(result.ok){
-          state.reflectionDraft = { date:'', purpose:'', feeling:'', hansei:'', naisei:'' };
+          clearDraft('reflection');
           showToast('振り返りを保存しました');
         } else {
           state.reflections = prevReflections;
@@ -1439,8 +1484,11 @@
     }
 
     bindClick('show-task-form', function(){ state.showTaskForm=true; render(); });
+    trackDraftInput(document.getElementById('newTaskTitle'), 'task', 'title');
+    trackDraftInput(document.getElementById('newTaskDue'), 'task', 'due');
+    trackDraftInput(document.getElementById('newTaskMemo'), 'task', 'memo');
     var cancelTaskBtn = document.getElementById('cancelTaskBtn');
-    if(cancelTaskBtn) cancelTaskBtn.addEventListener('click', function(){ state.showTaskForm=false; render(); });
+    if(cancelTaskBtn) cancelTaskBtn.addEventListener('click', function(){ state.showTaskForm=false; clearDraft('task'); render(); });
     var saveTaskBtn = document.getElementById('saveTaskBtn');
     if(saveTaskBtn){
       saveTaskBtn.addEventListener('click', function(){
@@ -1449,6 +1497,7 @@
         var due = document.getElementById('newTaskDue').value;
         var memo = document.getElementById('newTaskMemo').value.trim();
         state.showTaskForm=false;
+        clearDraft('task');
         addTask(title, currentCategory(), due||null, memo);
       });
     }
@@ -1472,8 +1521,11 @@
     }
 
     bindClick('show-book-form', function(){ state.showBookForm=true; render(); });
+    trackDraftInput(document.getElementById('newBookTitle'), 'book', 'title');
+    trackDraftInput(document.getElementById('newBookAuthor'), 'book', 'author');
+    trackDraftInput(document.getElementById('newBookMemo'), 'book', 'memo');
     var cancelBookBtn = document.getElementById('cancelBookBtn');
-    if(cancelBookBtn) cancelBookBtn.addEventListener('click', function(){ state.showBookForm=false; render(); });
+    if(cancelBookBtn) cancelBookBtn.addEventListener('click', function(){ state.showBookForm=false; clearDraft('book'); render(); });
     var saveBookBtn = document.getElementById('saveBookBtn');
     if(saveBookBtn){
       saveBookBtn.addEventListener('click', function(){
@@ -1485,6 +1537,7 @@
         var prev = state.books;
         state.books = state.books.concat([newBook]);
         state.showBookForm=false;
+        clearDraft('book');
         var ok = storageSet('book-notes', state.books);
         if(ok.ok){ showToast('読書メモを追加しました'); }
         else { state.books = prev; showToast(ok.message, 6000); }
@@ -1493,8 +1546,11 @@
     }
 
     bindClick('show-people-form', function(){ state.showPeopleForm=true; render(); });
+    trackDraftInput(document.getElementById('newPersonName'), 'person', 'name');
+    trackDraftInput(document.getElementById('newPersonRelation'), 'person', 'relation');
+    trackDraftInput(document.getElementById('newPersonMemo'), 'person', 'memo');
     var cancelPersonBtn = document.getElementById('cancelPersonBtn');
-    if(cancelPersonBtn) cancelPersonBtn.addEventListener('click', function(){ state.showPeopleForm=false; render(); });
+    if(cancelPersonBtn) cancelPersonBtn.addEventListener('click', function(){ state.showPeopleForm=false; clearDraft('person'); render(); });
     var savePersonBtn = document.getElementById('savePersonBtn');
     if(savePersonBtn){
       savePersonBtn.addEventListener('click', function(){
@@ -1506,6 +1562,7 @@
         var prev = state.people;
         state.people = state.people.concat([newPerson]);
         state.showPeopleForm=false;
+        clearDraft('person');
         var ok = storageSet('people-notes', state.people);
         if(ok.ok){ showToast('人物メモを追加しました'); }
         else { state.people = prev; showToast(ok.message, 6000); }
@@ -1516,8 +1573,8 @@
     main.querySelectorAll('[data-vision-term]').forEach(function(ta){
       ta.addEventListener('input', function(){
         var k = ta.getAttribute('data-vision-term');
-        if(!state.vision[k]) state.vision[k] = {text:'',updatedAt:null};
-        state.vision[k].text = ta.value;
+        state.drafts.vision[k] = ta.value;
+        saveDrafts();
       });
     });
 
@@ -1994,11 +2051,20 @@
 
   function saveVision(term){
     if(!state.vision[term]) state.vision[term]={text:'',updatedAt:null};
+    var prevText = state.vision[term].text;
     var prevUpdatedAt = state.vision[term].updatedAt;
+    if(state.drafts.vision[term]!==undefined) state.vision[term].text = state.drafts.vision[term];
     state.vision[term].updatedAt = Date.now();
     var result = storageSet('vision', state.vision);
-    if(result.ok){ showToast('Visionを保存しました'); }
-    else { state.vision[term].updatedAt = prevUpdatedAt; showToast(result.message, 6000); }
+    if(result.ok){
+      delete state.drafts.vision[term];
+      saveDrafts();
+      showToast('Visionを保存しました');
+    } else {
+      state.vision[term].text = prevText;
+      state.vision[term].updatedAt = prevUpdatedAt;
+      showToast(result.message, 6000);
+    }
     render();
   }
 
