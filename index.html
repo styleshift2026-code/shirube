@@ -623,7 +623,7 @@
     scheduleEditOpen: {},
     scheduleReflectOpen: {},
     openNotes: {},
-    reflectionDraft: { purpose:'', feeling:'', hansei:'', naisei:'' },
+    reflectionDraft: { date:'', purpose:'', feeling:'', hansei:'', naisei:'' },
     gcalClientId: null,
     gcalConnected: false,
     gcalConnecting: false,
@@ -956,10 +956,11 @@
       todaySchedules.forEach(function(s){ html += renderScheduleItem(s); });
     }
 
-    html += '<div class="section-title"><span class="bar"></span>今日の振り返り</div>';
+    html += '<div class="section-title"><span class="bar"></span>振り返り</div>';
     html += '<div class="form-card">'
-      + '<label class="field-label">目的</label><textarea id="reflectionPurpose" placeholder="今日は何のために取り組んだか">'+esc(state.reflectionDraft.purpose)+'</textarea>'
-      + '<label class="field-label">感じた・思ったこと</label><textarea id="reflectionFeeling" placeholder="今日感じたこと、心が動いたこと">'+esc(state.reflectionDraft.feeling)+'</textarea>'
+      + '<label class="field-label">日付</label><input type="date" id="reflectionDate" value="'+esc(state.reflectionDraft.date||today)+'">'
+      + '<label class="field-label">目的</label><textarea id="reflectionPurpose" placeholder="何のために取り組んだか">'+esc(state.reflectionDraft.purpose)+'</textarea>'
+      + '<label class="field-label">感じた・思ったこと</label><textarea id="reflectionFeeling" placeholder="感じたこと、心が動いたこと">'+esc(state.reflectionDraft.feeling)+'</textarea>'
       + '<label class="field-label">反省</label><textarea id="reflectionHansei" placeholder="うまくいかなかったこと、改善したいこと">'+esc(state.reflectionDraft.hansei)+'</textarea>'
       + '<label class="field-label">内省</label><textarea id="reflectionNaisei" placeholder="そこから見えてきた自分の傾向や気づき">'+esc(state.reflectionDraft.naisei)+'</textarea>'
       + '<button class="btn block" id="reflectionSave">振り返りを保存</button>'
@@ -1404,7 +1405,7 @@
         addSchedule(title, date, time, timeEnd, location, currentCategory());
       });
     }
-    var reflectionFieldIds = { purpose:'reflectionPurpose', feeling:'reflectionFeeling', hansei:'reflectionHansei', naisei:'reflectionNaisei' };
+    var reflectionFieldIds = { date:'reflectionDate', purpose:'reflectionPurpose', feeling:'reflectionFeeling', hansei:'reflectionHansei', naisei:'reflectionNaisei' };
     Object.keys(reflectionFieldIds).forEach(function(key){
       var el = document.getElementById(reflectionFieldIds[key]);
       if(el){
@@ -1416,17 +1417,18 @@
     var reflectionSave = document.getElementById('reflectionSave');
     if(reflectionSave){
       reflectionSave.addEventListener('click', function(){
+        var date = document.getElementById('reflectionDate').value || todayStr();
         var purpose = (document.getElementById('reflectionPurpose').value || '').trim();
         var feeling = (document.getElementById('reflectionFeeling').value || '').trim();
         var hansei = (document.getElementById('reflectionHansei').value || '').trim();
         var naisei = (document.getElementById('reflectionNaisei').value || '').trim();
         if(!purpose && !feeling && !hansei && !naisei){ showToast('いずれかの項目を入力してください'); return; }
-        var entry = { id: uid(), date: todayStr(), purpose: purpose, feeling: feeling, hansei: hansei, naisei: naisei, createdAt: Date.now() };
+        var entry = { id: uid(), date: date, purpose: purpose, feeling: feeling, hansei: hansei, naisei: naisei, createdAt: Date.now() };
         var prevReflections = state.reflections;
         state.reflections = state.reflections.concat([entry]);
         var result = storageSet('reflections', state.reflections);
         if(result.ok){
-          state.reflectionDraft = { purpose:'', feeling:'', hansei:'', naisei:'' };
+          state.reflectionDraft = { date:'', purpose:'', feeling:'', hansei:'', naisei:'' };
           showToast('振り返りを保存しました');
         } else {
           state.reflections = prevReflections;
