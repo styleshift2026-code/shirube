@@ -633,7 +633,9 @@
     gcalLoading: false,
     gcalError: null,
     gcalStatus: {},
-    gcalLastFetchInfo: null
+    gcalLastFetchInfo: null,
+    geminiApiKey: null,
+    geminiRewriting: false
   };
 
   function todayStr(){
@@ -732,6 +734,7 @@
     state.dailyRoutines = storageGet('daily-routines', []);
     state.routineCompletions = storageGet('routine-completions', {});
     state.gcalClientId = storageGet('gcal-client-id', null);
+    state.geminiApiKey = storageGet('gemini-api-key', null);
     var loadedDrafts = storageGet('drafts', null);
     var fallbackDrafts = defaultDrafts();
     state.drafts = loadedDrafts ? Object.assign(fallbackDrafts, loadedDrafts, {
@@ -995,13 +998,26 @@
     }
 
     html += '<div class="section-title"><span class="bar"></span>振り返り</div>';
+    if(!state.geminiApiKey){
+      html += '<div class="card gcal-card">'
+        + '<div class="vision-term-label" style="font-size:13px;">AIでわかりやすく整えて登録（任意）</div>'
+        + '<div class="gcal-banner">Google AI StudioでAPIキー（無料枠）を発行し、貼り付けると、保存時に内容はそのままで短く分かりやすく整えて登録されます。</div>'
+        + '<input type="text" id="geminiKeyInput" placeholder="AIzaSy...">'
+        + '<button class="btn small" style="margin-top:8px;" data-action="gemini-save-key">保存する</button>'
+        + '</div>';
+    } else {
+      html += '<div class="card gcal-card">'
+        + '<div class="vision-term-label" style="font-size:13px;">✓ AIでわかりやすく整えて登録します</div>'
+        + '<button class="link-btn" data-action="gemini-change-key">APIキーを解除</button>'
+        + '</div>';
+    }
     html += '<div class="form-card">'
       + '<label class="field-label">日付</label><input type="date" id="reflectionDate" value="'+esc(state.drafts.reflection.date||today)+'">'
       + '<label class="field-label">目的</label><textarea id="reflectionPurpose" placeholder="何のために取り組んだか">'+esc(state.drafts.reflection.purpose)+'</textarea>'
       + '<label class="field-label">感じた・思ったこと</label><textarea id="reflectionFeeling" placeholder="感じたこと、心が動いたこと">'+esc(state.drafts.reflection.feeling)+'</textarea>'
       + '<label class="field-label">反省</label><textarea id="reflectionHansei" placeholder="うまくいかなかったこと、改善したいこと">'+esc(state.drafts.reflection.hansei)+'</textarea>'
       + '<label class="field-label">内省</label><textarea id="reflectionNaisei" placeholder="そこから見えてきた自分の傾向や気づき">'+esc(state.drafts.reflection.naisei)+'</textarea>'
-      + '<button class="btn block" id="reflectionSave">振り返りを保存</button>'
+      + '<button class="btn block" id="reflectionSave" '+(state.geminiRewriting?'disabled':'')+'>'+(state.geminiRewriting?'AIで整えています…':'振り返りを保存')+'</button>'
       + '</div>';
     html += '<button class="link-btn" data-action="goto-reflections" style="margin-bottom:16px;display:inline-block;">過去の振り返りをすべて見る →</button>';
     return html;
@@ -1463,25 +1479,48 @@
     if(reflectionSave){
       reflectionSave.addEventListener('click', function(){
         var date = document.getElementById('reflectionDate').value || todayStr();
-        var purpose = (document.getElementById('reflectionPurpose').value || '').trim();
-        var feeling = (document.getElementById('reflectionFeeling').value || '').trim();
-        var hansei = (document.getElementById('reflectionHansei').value || '').trim();
-        var naisei = (document.getElementById('reflectionNaisei').value || '').trim();
-        if(!purpose && !feeling && !hansei && !naisei){ showToast('いずれかの項目を入力してください'); return; }
-        var entry = { id: uid(), date: date, purpose: purpose, feeling: feeling, hansei: hansei, naisei: naisei, createdAt: Date.now() };
-        var prevReflections = state.reflections;
-        state.reflections = state.reflections.concat([entry]);
-        var result = storageSet('reflections', state.reflections);
-        if(result.ok){
-          clearDraft('reflection');
-          showToast('振り返りを保存しました');
-        } else {
-          state.reflections = prevReflections;
-          showToast(result.message, 6000);
+        var fields = {
+          purpose: (document.getElementById('reflectionPurpose').value || '').trim(),
+          feeling: (document.getElementById('reflectionFeeling').value || '').trim(),
+          hansei: (document.getElementById('reflectionHansei').value || '').trim(),
+          naisei: (document.getElementById('reflectionNaisei').value || '').trim()
+        };
+        if(!fields.purpose && !fields.feeling && !fields.hansei && !fields.naisei){ showToast('いずれかの項目を入力してください'); return; }
+
+        function persist(finalFields, aiFailed){
+          var entry = { id: uid(), date: date, purpose: finalFields.purpose, feeling: finalFields.feeling, hansei: finalFields.hansei, naisei: finalFields.naisei, createdAt: Date.now() };
+          var prevReflections = state.reflections;
+          state.reflections = state.reflections.concat([entry]);
+          var result = storageSet('reflections', state.reflections);
+          state.geminiRewriting = false;
+          if(result.ok){
+            clearDraft('reflection');
+            showToast(aiFailed ? '振り返りを保存しました（AIでの整形は失敗したため元の文章のままです）' : '振り返りを保存しました', aiFailed?6000:2400);
+          } else {
+            state.reflections = prevReflections;
+            showToast(result.message, 6000);
+          }
+          render();
         }
-        render();
+
+        if(state.geminiApiKey){
+          state.geminiRewriting = true;
+          render();
+          rewriteReflectionWithGemini(fields).then(function(rewritten){
+            persist(rewritten || fields, !rewritten);
+          });
+        } else {
+          persist(fields, false);
+        }
       });
     }
+    bindClick('gemini-save-key', function(){
+      var el = document.getElementById('geminiKeyInput');
+      var v = el ? el.value.trim() : '';
+      if(!v){ showToast('APIキーを入力してください'); return; }
+      saveGeminiApiKey(v);
+    });
+    bindClick('gemini-change-key', function(){ resetGeminiApiKey(); });
 
     bindClick('show-task-form', function(){ state.showTaskForm=true; render(); });
     trackDraftInput(document.getElementById('newTaskTitle'), 'task', 'title');
@@ -2066,6 +2105,64 @@
       showToast(result.message, 6000);
     }
     render();
+  }
+
+  /* ---------- AI（Gemini 無料枠）で振り返りを整える ---------- */
+  function saveGeminiApiKey(key){
+    state.geminiApiKey = key;
+    storageSet('gemini-api-key', key);
+    render();
+  }
+  function resetGeminiApiKey(){
+    state.geminiApiKey = null;
+    storageSet('gemini-api-key', null);
+    render();
+  }
+
+  function callGemini(promptText){
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(state.geminiApiKey);
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+    }).then(function(res){
+      if(!res.ok){ var err = new Error('HTTP '+res.status); err.status = res.status; throw err; }
+      return res.json();
+    }).then(function(data){
+      var c = data && data.candidates && data.candidates[0];
+      var text = c && c.content && c.content.parts && c.content.parts[0] && c.content.parts[0].text;
+      return text || '';
+    });
+  }
+
+  // 振り返りの4項目を、意味を変えずに分かりやすく短くAIで整える。
+  // 失敗した場合は null を返し、呼び出し側は元の文章のまま保存する。
+  function rewriteReflectionWithGemini(fields){
+    var lines = [
+      '以下は日々の振り返りメモの4項目です。それぞれの項目について、書かれている内容の意味やニュアンスを変えずに、',
+      'より分かりやすく簡潔な文章に整えてください。空欄の項目はそのまま空文字列にしてください。',
+      '出力は次のJSON形式のみとし、前置き・説明・コードブロック記法（```など）は一切使わないでください。',
+      '{"purpose":"...","feeling":"...","hansei":"...","naisei":"..."}',
+      '',
+      '目的: ' + (fields.purpose||''),
+      '感じた・思ったこと: ' + (fields.feeling||''),
+      '反省: ' + (fields.hansei||''),
+      '内省: ' + (fields.naisei||'')
+    ];
+    return callGemini(lines.join('\n')).then(function(text){
+      var cleaned = text.replace(/```json/gi,'').replace(/```/g,'').trim();
+      var parsed = JSON.parse(cleaned);
+      if(!parsed || typeof parsed !== 'object') throw new Error('invalid response shape');
+      return {
+        purpose: typeof parsed.purpose==='string' ? parsed.purpose : fields.purpose,
+        feeling: typeof parsed.feeling==='string' ? parsed.feeling : fields.feeling,
+        hansei: typeof parsed.hansei==='string' ? parsed.hansei : fields.hansei,
+        naisei: typeof parsed.naisei==='string' ? parsed.naisei : fields.naisei
+      };
+    }).catch(function(e){
+      console.error('gemini rewrite failed', e);
+      return null;
+    });
   }
 
   /* ================= INIT ================= */
