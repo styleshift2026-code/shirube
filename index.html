@@ -1039,12 +1039,13 @@
     return html;
   }
 
+  var WEEK_START_DAY = 3; // 0=日, 1=月, 2=火, 3=水 … 週の区切りを水曜始まり（水〜火）にする
   function weekStartOf(dateStr){
     var d = new Date(dateStr+'T00:00:00');
     if(isNaN(d.getTime())) d = new Date();
     var day = d.getDay();
-    var diffToMonday = (day===0) ? -6 : (1-day);
-    d.setDate(d.getDate()+diffToMonday);
+    var diffFromWeekStart = (day - WEEK_START_DAY + 7) % 7;
+    d.setDate(d.getDate()-diffFromWeekStart);
     return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
   }
   function weekRangeLabel(weekStart){
