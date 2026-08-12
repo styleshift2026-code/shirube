@@ -2132,12 +2132,25 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
     }).then(function(res){
-      if(!res.ok){ var err = new Error('HTTP '+res.status); err.status = res.status; throw err; }
+      if(!res.ok){
+        return res.json().catch(function(){ return null; }).then(function(body){
+          var detail = body && body.error && body.error.message;
+          var err = new Error(detail ? ('HTTP '+res.status+': '+detail) : ('HTTP '+res.status));
+          err.status = res.status;
+          throw err;
+        });
+      }
       return res.json();
     }).then(function(data){
       var c = data && data.candidates && data.candidates[0];
       var text = c && c.content && c.content.parts && c.content.parts[0] && c.content.parts[0].text;
-      return text || '';
+      if(!text){
+        var blockReason = data && data.promptFeedback && data.promptFeedback.blockReason;
+        var finishReason = c && c.finishReason;
+        var err = new Error(blockReason ? ('ブロックされました: '+blockReason) : (finishReason ? ('応答なし: '+finishReason) : '応答にテキストが含まれていません'));
+        throw err;
+      }
+      return text;
     });
   }
 
@@ -2176,7 +2189,7 @@
     }).catch(function(e){
       console.error('weekly summary failed', e);
       state.weeklySummaryLoading[weekKey] = false;
-      showToast('週次まとめの生成に失敗しました');
+      showToast('週次まとめの生成に失敗しました: ' + ((e&&e.message)||e), 8000);
       render();
     });
   }
