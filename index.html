@@ -1086,7 +1086,14 @@
         var loading = !!state.weeklySummaryLoading[wk];
         var stale = summary && summary.count < items.length;
         if(summary && !stale){
-          html += '<div class="ai-suggestion"><div class="ai-suggestion-label">AIによる週次まとめ</div>'+esc(summary.text)+'</div>';
+          html += '<div class="ai-suggestion">';
+          html += '<div class="ai-suggestion-label">AIによる週次まとめ</div>';
+          [['目的',summary.purpose],['感じた・思ったこと',summary.feeling],['反省',summary.hansei],['内省',summary.naisei]].forEach(function(p){
+            if(p[1] && p[1].trim()){
+              html += '<div class="reflection-field"><span class="reflection-field-label">'+esc(p[0])+'</span><div>'+esc(p[1])+'</div></div>';
+            }
+          });
+          html += '</div>';
           html += '<button class="btn small secondary" style="margin-top:8px;" data-action="gen-week-summary" data-week="'+wk+'" '+(loading?'disabled':'')+'>'+(loading?'まとめ中…':'再生成する')+'</button>';
         } else {
           if(stale){ html += '<div class="gcal-banner">前回のまとめ以降に新しい振り返りが追加されています</div>'; }
@@ -2179,23 +2186,38 @@
     if(items.length===0) return;
     state.weeklySummaryLoading[weekKey] = true;
     render();
-    var body = items.slice().sort(function(a,b){ return a.createdAt-b.createdAt; }).map(function(r){
-      var lines = [];
-      if(r.date) lines.push('日付: '+r.date);
-      if(r.purpose) lines.push('目的: '+r.purpose);
-      if(r.feeling) lines.push('感じたこと: '+r.feeling);
-      if(r.hansei) lines.push('反省: '+r.hansei);
-      if(r.naisei) lines.push('内省: '+r.naisei);
-      return lines.join('\n');
-    }).join('\n\n---\n\n');
-    var prompt = '以下は1週間分の振り返りメモです。全体を通じて見えてくるテーマ・良かった点・課題・次に活かしたいことを、'
-      + '簡潔で読みやすい文章にまとめてください。箇条書きではなく、自然な文章でお願いします。まとめた文章のみを出力してください。\n\n'
-      + body;
+    var sorted = items.slice().sort(function(a,b){ return a.createdAt-b.createdAt; });
+    function fieldBody(field){
+      return sorted.filter(function(r){ return r[field]; }).map(function(r){
+        return (r.date?'日付: '+r.date+'\n':'') + r[field];
+      }).join('\n\n---\n\n');
+    }
+    var purposeBody = fieldBody('purpose');
+    var feelingBody = fieldBody('feeling');
+    var hanseiBody = fieldBody('hansei');
+    var naiseiBody = fieldBody('naisei');
+    var prompt = '以下は1週間分の振り返りメモを「目的」「感じた・思ったこと」「反省」「内省」の4項目別に並べたものです。'
+      + 'それぞれの項目ごとに、全体を通じて見えてくる内容を簡潔で読みやすい文章にまとめてください。箇条書きではなく、自然な文章でお願いします。'
+      + 'その項目の記録が1件もない場合は空文字列にしてください。'
+      + '出力は次のJSON形式のみとし、前置き・説明・コードブロック記法（```など）は一切使わないでください。\n'
+      + '{"purpose":"...","feeling":"...","hansei":"...","naisei":"..."}\n\n'
+      + '【目的】\n' + (purposeBody||'(記録なし)') + '\n\n'
+      + '【感じた・思ったこと】\n' + (feelingBody||'(記録なし)') + '\n\n'
+      + '【反省】\n' + (hanseiBody||'(記録なし)') + '\n\n'
+      + '【内省】\n' + (naiseiBody||'(記録なし)');
     callGemini(prompt).then(function(text){
-      var out = (text||'').trim();
+      var cleaned = (text||'').replace(/```json/gi,'').replace(/```/g,'').trim();
+      var parsed = JSON.parse(cleaned);
       state.weeklySummaryLoading[weekKey] = false;
-      if(out){
-        state.weeklySummaries[weekKey] = { text: out, generatedAt: Date.now(), count: items.length };
+      if(parsed && typeof parsed === 'object'){
+        state.weeklySummaries[weekKey] = {
+          purpose: typeof parsed.purpose==='string' ? parsed.purpose : '',
+          feeling: typeof parsed.feeling==='string' ? parsed.feeling : '',
+          hansei: typeof parsed.hansei==='string' ? parsed.hansei : '',
+          naisei: typeof parsed.naisei==='string' ? parsed.naisei : '',
+          generatedAt: Date.now(),
+          count: items.length
+        };
         storageSet('weekly-summaries', state.weeklySummaries);
       } else {
         showToast('AIからの応答を取得できませんでした');
