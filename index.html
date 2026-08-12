@@ -1003,19 +1003,14 @@
     }
 
     html += '<div class="section-title"><span class="bar"></span>振り返り</div>';
-    if(!state.geminiApiKey){
-      html += '<div class="card gcal-card">'
-        + '<div class="vision-term-label" style="font-size:13px;">AI週次まとめ機能（任意）</div>'
-        + '<div class="gcal-banner">Google AI StudioでAPIキー（無料枠）を発行し、貼り付けると、「まとめ」タブで1週間分の振り返りをAIが短くまとめられるようになります。登録される振り返りの内容自体は変わりません。</div>'
-        + '<input type="text" id="geminiKeyInput" placeholder="AIzaSy...">'
-        + '<button class="btn small" style="margin-top:8px;" data-action="gemini-save-key">保存する</button>'
-        + '</div>';
-    } else {
-      html += '<div class="card gcal-card">'
-        + '<div class="vision-term-label" style="font-size:13px;">✓ 「まとめ」タブでAI週次まとめが使えます</div>'
-        + '<button class="link-btn" data-action="gemini-change-key">APIキーを解除</button>'
-        + '</div>';
-    }
+    html += '<div class="card gcal-card">'
+      + '<div class="vision-term-label" style="font-size:13px;">'+(state.geminiApiKey?'✓ AI週次まとめ機能が使えます':'AI週次まとめ機能（任意）')+'</div>'
+      + '<div class="gcal-banner">Google AI StudioでAPIキー（無料枠）を発行し貼り付けると、「まとめ」タブで1週間分の振り返りをAIが短くまとめられます。登録される振り返りの内容自体は変わりません。</div>'
+      + '<input type="text" id="geminiKeyInput" placeholder="AIzaSy..." value="'+esc(state.geminiApiKey||'')+'">'
+      + '<div class="btn-row" style="margin-top:8px;">'
+      + '<button class="btn small" data-action="gemini-save-key">保存する</button>'
+      + (state.geminiApiKey ? '<button class="btn small secondary" data-action="gemini-change-key">解除する</button>' : '')
+      + '</div></div>';
     html += '<div class="form-card">'
       + '<label class="field-label">日付</label><input type="date" id="reflectionDate" value="'+esc(state.drafts.reflection.date||today)+'">'
       + '<label class="field-label">目的</label><textarea id="reflectionPurpose" placeholder="何のために取り組んだか">'+esc(state.drafts.reflection.purpose)+'</textarea>'
@@ -1251,20 +1246,19 @@
 
   function renderGcalControls(){
     var html = '<div class="card gcal-card">';
-    if(!state.gcalClientId){
-      html += '<div class="vision-term-label" style="font-size:13px;">Googleカレンダー連携</div>'
-        + '<div class="gcal-banner">Google Cloud ConsoleでOAuthクライアントID（ウェブアプリケーション）を作成し、貼り付けてください。</div>'
-        + '<input type="text" id="gcalClientIdInput" placeholder="xxxxx.apps.googleusercontent.com">'
-        + '<button class="btn small" style="margin-top:8px;" data-action="gcal-save-client-id">保存する</button>';
-    } else if(!state.gcalConnected){
-      html += '<div class="vision-term-label" style="font-size:13px;">Googleカレンダー連携</div>'
-        + '<div class="btn-row" style="margin-top:8px;align-items:center;">'
+    html += '<div class="vision-term-label" style="font-size:13px;">'+(state.gcalConnected?'✓ Googleカレンダーに接続済み':'Googleカレンダー連携')+'</div>'
+      + '<div class="gcal-banner">Google Cloud ConsoleでOAuthクライアントID（ウェブアプリケーション）を作成し貼り付けてください。</div>'
+      + '<input type="text" id="gcalClientIdInput" placeholder="xxxxx.apps.googleusercontent.com" value="'+esc(state.gcalClientId||'')+'">'
+      + '<div class="btn-row" style="margin-top:8px;">'
+      + '<button class="btn small" data-action="gcal-save-client-id">保存する</button>'
+      + (state.gcalClientId ? '<button class="btn small secondary" data-action="gcal-change-client-id">解除する</button>' : '')
+      + '</div>';
+    if(state.gcalClientId && !state.gcalConnected){
+      html += '<div class="btn-row" style="margin-top:8px;">'
         + '<button class="btn small" data-action="gcal-connect" '+(state.gcalConnecting?'disabled':'')+'>'+(state.gcalConnecting?'ログイン中…':'Googleでログイン')+'</button>'
-        + '<button class="link-btn" data-action="gcal-change-client-id">クライアントIDを変更</button>'
         + '</div>';
-    } else {
-      html += '<div class="vision-term-label" style="font-size:13px;">✓ Googleカレンダーに接続済み</div>'
-        + '<div class="btn-row" style="margin-top:8px;">'
+    } else if(state.gcalConnected){
+      html += '<div class="btn-row" style="margin-top:8px;">'
         + '<button class="btn small secondary" data-action="gcal-refresh" '+(state.gcalLoading?'disabled':'')+'>'+(state.gcalLoading?'更新中…':'⟳ 更新')+'</button>'
         + '<button class="btn small secondary" data-action="gcal-disconnect">連携解除</button>'
         + '</div>';
