@@ -365,6 +365,8 @@
   .cal-nav button{ background:none; border:1px solid var(--line); border-radius:50%; width:32px; height:32px; font-size:15px; color:var(--ink); cursor:pointer; }
   .cal-nav .cal-label{ font-family:var(--font-display); font-weight:700; font-size:16px; }
   .gcal-banner{ font-size:11.5px; color:var(--ink-soft); margin-bottom:8px; }
+  .ai-suggestion{ margin-top:10px; background:#f2eee0; border:1px dashed var(--ink-soft); border-radius:3px; padding:10px; font-size:13px; line-height:1.6; white-space:pre-wrap; }
+  .ai-suggestion-label{ font-size:10.5px; font-weight:700; color:var(--ink-soft); margin-bottom:4px; }
   .gcal-banner.error{ color:var(--stamp); }
   .gcal-card{ margin-bottom:12px; }
   .gcal-event-item{ background:var(--paper-deep); border:1px dashed var(--ink-soft); border-radius:2px; padding:8px 11px; margin-bottom:8px; font-size:13px; line-height:1.5; }
@@ -635,7 +637,9 @@
     gcalStatus: {},
     gcalLastFetchInfo: null,
     geminiApiKey: null,
-    geminiRewriting: false
+    geminiRewriting: false,
+    weeklySummaries: {},
+    weeklySummaryLoading: {}
   };
 
   function todayStr(){
@@ -735,6 +739,7 @@
     state.routineCompletions = storageGet('routine-completions', {});
     state.gcalClientId = storageGet('gcal-client-id', null);
     state.geminiApiKey = storageGet('gemini-api-key', null);
+    state.weeklySummaries = storageGet('weekly-summaries', {});
     var loadedDrafts = storageGet('drafts', null);
     var fallbackDrafts = defaultDrafts();
     state.drafts = loadedDrafts ? Object.assign(fallbackDrafts, loadedDrafts, {
@@ -1076,6 +1081,19 @@
 
       html += '<div class="card week-card">';
       html += '<div class="vision-head"><span class="vision-term-label">'+esc(weekRangeLabel(wk))+'</span><span class="vision-updated">'+items.length+'件</span></div>';
+
+      if(state.geminiApiKey){
+        var summary = state.weeklySummaries[wk];
+        var loading = !!state.weeklySummaryLoading[wk];
+        var stale = summary && summary.count < items.length;
+        if(summary && !stale){
+          html += '<div class="ai-suggestion"><div class="ai-suggestion-label">AIによる週次まとめ</div>'+esc(summary.text)+'</div>';
+          html += '<button class="btn small secondary" style="margin-top:8px;" data-action="gen-week-summary" data-week="'+wk+'" '+(loading?'disabled':'')+'>'+(loading?'まとめ中…':'再生成する')+'</button>';
+        } else {
+          if(stale){ html += '<div class="gcal-banner">前回のまとめ以降に新しい振り返りが追加されています</div>'; }
+          html += '<button class="btn small" data-action="gen-week-summary" data-week="'+wk+'" '+(loading?'disabled':'')+'>'+(loading?'まとめ中…':'AIでこの週をまとめる')+'</button>';
+        }
+      }
 
       items.forEach(function(r){
         var dateLabel = r.date ? esc(fmtDate(r.date)) : esc(fmtDateTime(r.createdAt));
@@ -1669,6 +1687,7 @@
     else if(action==='goto-reflections'){ state.activeTab='matome'; state.matomeSubTab='reflections'; render(); }
     else if(action==='delete-reflection'){ state.deleteArmed='reflection-'+id; render(); }
     else if(action==='delete-reflection-confirm'){ deleteReflection(id); }
+    else if(action==='gen-week-summary'){ generateWeeklySummary(el.getAttribute('data-week')); }
     else if(action==='delete-schedule'){ state.deleteArmed='sched-'+id; render(); }
     else if(action==='delete-schedule-confirm'){ deleteSchedule(id); }
     else if(action==='schedule-edit-toggle'){
@@ -2163,6 +2182,44 @@
     }).catch(function(e){
       console.error('gemini rewrite failed', e);
       return null;
+    });
+  }
+
+  function generateWeeklySummary(weekKey){
+    var items = state.reflections.filter(function(r){
+      var d = r.date || (new Date(r.createdAt)).toISOString().slice(0,10);
+      return weekStartOf(d)===weekKey;
+    });
+    if(items.length===0) return;
+    state.weeklySummaryLoading[weekKey] = true;
+    render();
+    var body = items.slice().sort(function(a,b){ return a.createdAt-b.createdAt; }).map(function(r){
+      var lines = [];
+      if(r.date) lines.push('日付: '+r.date);
+      if(r.purpose) lines.push('目的: '+r.purpose);
+      if(r.feeling) lines.push('感じたこと: '+r.feeling);
+      if(r.hansei) lines.push('反省: '+r.hansei);
+      if(r.naisei) lines.push('内省: '+r.naisei);
+      return lines.join('\n');
+    }).join('\n\n---\n\n');
+    var prompt = '以下は1週間分の振り返りメモです。全体を通じて見えてくるテーマ・良かった点・課題・次に活かしたいことを、'
+      + '簡潔で読みやすい文章にまとめてください。箇条書きではなく、自然な文章でお願いします。まとめた文章のみを出力してください。\n\n'
+      + body;
+    callGemini(prompt).then(function(text){
+      var out = (text||'').trim();
+      state.weeklySummaryLoading[weekKey] = false;
+      if(out){
+        state.weeklySummaries[weekKey] = { text: out, generatedAt: Date.now(), count: items.length };
+        storageSet('weekly-summaries', state.weeklySummaries);
+      } else {
+        showToast('AIからの応答を取得できませんでした');
+      }
+      render();
+    }).catch(function(e){
+      console.error('weekly summary failed', e);
+      state.weeklySummaryLoading[weekKey] = false;
+      showToast('週次まとめの生成に失敗しました');
+      render();
     });
   }
 
