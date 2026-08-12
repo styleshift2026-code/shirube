@@ -2125,7 +2125,9 @@
     render();
   }
 
-  function callGemini(promptText){
+  function sleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+
+  function callGeminiOnce(promptText){
     var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + encodeURIComponent(state.geminiApiKey);
     return fetch(url, {
       method: 'POST',
@@ -2151,6 +2153,19 @@
         throw err;
       }
       return text;
+    });
+  }
+
+  // モデルが一時的に混み合っている（503）・レート制限（429）の場合は、
+  // 少し間を空けて自動で再試行する。
+  function callGemini(promptText, attempt){
+    attempt = attempt || 1;
+    return callGeminiOnce(promptText).catch(function(e){
+      var retryable = e && (e.status===503 || e.status===429);
+      if(retryable && attempt < 3){
+        return sleep(attempt * 1500).then(function(){ return callGemini(promptText, attempt+1); });
+      }
+      throw e;
     });
   }
 
