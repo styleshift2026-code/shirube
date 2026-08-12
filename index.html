@@ -1108,16 +1108,22 @@
       items.forEach(function(r){
         var dateLabel = r.date ? esc(fmtDate(r.date)) : esc(fmtDateTime(r.createdAt));
         var scheduleTag = r.scheduleTitle ? '<span class="reflection-schedule-tag">📅 '+esc(r.scheduleTitle)+'</span>' : '';
-        html += '<div class="reflection-item"><div class="reflection-date">'+dateLabel+scheduleTag+'</div>'
-          + renderReflectionBody(r);
-        html += '<div class="task-actions">';
-        if(state.deleteArmed==='reflection-'+r.id){
-          html += '<button class="link-btn danger" data-action="delete-reflection-confirm" data-id="'+r.id+'">本当に削除する</button>'
-            + '<button class="link-btn" data-action="delete-task-cancel">キャンセル</button>';
-        } else {
-          html += '<button class="link-btn danger" data-action="delete-reflection" data-id="'+r.id+'">削除</button>';
+        var itemOpen = !!state.openNotes['reflection-'+r.id];
+        html += '<div class="reflection-item">'
+          + '<div class="reflection-date" data-action="toggle-note" data-id="reflection-'+r.id+'" style="cursor:pointer;">'
+          + (itemOpen?'▾ ':'▸ ') + dateLabel + scheduleTag + '</div>';
+        if(itemOpen){
+          html += renderReflectionBody(r);
+          html += '<div class="task-actions">';
+          if(state.deleteArmed==='reflection-'+r.id){
+            html += '<button class="link-btn danger" data-action="delete-reflection-confirm" data-id="'+r.id+'">本当に削除する</button>'
+              + '<button class="link-btn" data-action="delete-task-cancel">キャンセル</button>';
+          } else {
+            html += '<button class="link-btn danger" data-action="delete-reflection" data-id="'+r.id+'">削除</button>';
+          }
+          html += '</div>';
         }
-        html += '</div></div>';
+        html += '</div>';
       });
       html += '</div>';
     });
