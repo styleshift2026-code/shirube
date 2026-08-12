@@ -2126,7 +2126,7 @@
   }
 
   function callGemini(promptText){
-    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(state.geminiApiKey);
+    var url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + encodeURIComponent(state.geminiApiKey);
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
