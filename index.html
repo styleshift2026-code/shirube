@@ -638,7 +638,8 @@
     gcalLastFetchInfo: null,
     geminiApiKey: null,
     weeklySummaries: {},
-    weeklySummaryLoading: {}
+    weeklySummaryLoading: {},
+    openSummaries: {}
   };
 
   function todayStr(){
@@ -1086,13 +1087,16 @@
         var loading = !!state.weeklySummaryLoading[wk];
         var stale = summary && summary.count < items.length;
         if(summary && !stale){
+          var summaryOpen = !!state.openSummaries[wk];
           html += '<div class="ai-suggestion">';
-          html += '<div class="ai-suggestion-label">AIによる週次まとめ</div>';
-          [['目的',summary.purpose],['感じた・思ったこと',summary.feeling],['反省',summary.hansei],['内省',summary.naisei]].forEach(function(p){
-            if(p[1] && p[1].trim()){
-              html += '<div class="reflection-field"><span class="reflection-field-label">'+esc(p[0])+'</span><div>'+esc(p[1])+'</div></div>';
-            }
-          });
+          html += '<button class="link-btn" data-action="toggle-week-summary" data-week="'+wk+'">'+(summaryOpen?'▾ AIによる週次まとめ（閉じる）':'▸ AIによる週次まとめ（開く）')+'</button>';
+          if(summaryOpen){
+            [['目的',summary.purpose],['感じた・思ったこと',summary.feeling],['反省',summary.hansei],['内省',summary.naisei]].forEach(function(p){
+              if(p[1] && p[1].trim()){
+                html += '<div class="reflection-field"><span class="reflection-field-label">'+esc(p[0])+'</span><div>'+esc(p[1])+'</div></div>';
+              }
+            });
+          }
           html += '</div>';
           html += '<button class="btn small secondary" style="margin-top:8px;" data-action="gen-week-summary" data-week="'+wk+'" '+(loading?'disabled':'')+'>'+(loading?'まとめ中…':'再生成する')+'</button>';
         } else {
@@ -1681,6 +1685,11 @@
     else if(action==='delete-reflection'){ state.deleteArmed='reflection-'+id; render(); }
     else if(action==='delete-reflection-confirm'){ deleteReflection(id); }
     else if(action==='gen-week-summary'){ generateWeeklySummary(el.getAttribute('data-week')); }
+    else if(action==='toggle-week-summary'){
+      var wkKey = el.getAttribute('data-week');
+      state.openSummaries[wkKey] = !state.openSummaries[wkKey];
+      render();
+    }
     else if(action==='delete-schedule'){ state.deleteArmed='sched-'+id; render(); }
     else if(action==='delete-schedule-confirm'){ deleteSchedule(id); }
     else if(action==='schedule-edit-toggle'){
