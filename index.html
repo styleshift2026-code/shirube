@@ -624,6 +624,7 @@
     deleteArmed: null,
     scheduleEditOpen: {},
     scheduleReflectOpen: {},
+    reflectionEditOpen: {},
     openNotes: {},
     drafts: null,
     gcalClientId: null,
@@ -1108,8 +1109,23 @@
           + '<div class="reflection-date" data-action="toggle-note" data-id="reflection-'+r.id+'" style="cursor:pointer;">'
           + (itemOpen?'▾ ':'▸ ') + dateLabel + scheduleTag + '</div>';
         if(itemOpen){
-          html += renderReflectionBody(r);
+          var editingReflection = !!state.reflectionEditOpen[r.id];
+          if(editingReflection){
+            html += '<div class="sched-edit-form">'
+              + '<label class="field-label">日付</label><input type="date" class="ref-edit-date" data-id="'+r.id+'" value="'+esc(r.date||'')+'">'
+              + '<label class="field-label">目的</label><textarea class="ref-edit-purpose" data-id="'+r.id+'">'+esc(r.purpose||'')+'</textarea>'
+              + '<label class="field-label">感じた・思ったこと</label><textarea class="ref-edit-feeling" data-id="'+r.id+'">'+esc(r.feeling||'')+'</textarea>'
+              + '<label class="field-label">反省</label><textarea class="ref-edit-hansei" data-id="'+r.id+'">'+esc(r.hansei||'')+'</textarea>'
+              + '<label class="field-label">内省</label><textarea class="ref-edit-naisei" data-id="'+r.id+'">'+esc(r.naisei||'')+'</textarea>'
+              + '<div class="btn-row" style="margin-top:8px;">'
+              + '<button class="btn small" data-action="reflection-edit-save" data-id="'+r.id+'">保存</button>'
+              + '<button class="btn small secondary" data-action="reflection-edit-close" data-id="'+r.id+'">閉じる</button>'
+              + '</div></div>';
+          } else {
+            html += renderReflectionBody(r);
+          }
           html += '<div class="task-actions">';
+          if(!editingReflection){ html += '<button class="link-btn" data-action="reflection-edit-toggle" data-id="'+r.id+'">編集</button>'; }
           if(state.deleteArmed==='reflection-'+r.id){
             html += '<button class="link-btn danger" data-action="delete-reflection-confirm" data-id="'+r.id+'">本当に削除する</button>'
               + '<button class="link-btn" data-action="delete-task-cancel">キャンセル</button>';
@@ -1684,6 +1700,22 @@
     else if(action==='goto-reflections'){ state.activeTab='matome'; state.matomeSubTab='reflections'; render(); }
     else if(action==='delete-reflection'){ state.deleteArmed='reflection-'+id; render(); }
     else if(action==='delete-reflection-confirm'){ deleteReflection(id); }
+    else if(action==='reflection-edit-toggle'){ state.reflectionEditOpen[id] = !state.reflectionEditOpen[id]; render(); }
+    else if(action==='reflection-edit-close'){ state.reflectionEditOpen[id] = false; render(); }
+    else if(action==='reflection-edit-save'){
+      var rDateEl = document.querySelector('.ref-edit-date[data-id="'+id+'"]');
+      var rPurEl = document.querySelector('.ref-edit-purpose[data-id="'+id+'"]');
+      var rFeelEl = document.querySelector('.ref-edit-feeling[data-id="'+id+'"]');
+      var rHanEl = document.querySelector('.ref-edit-hansei[data-id="'+id+'"]');
+      var rNaiEl = document.querySelector('.ref-edit-naisei[data-id="'+id+'"]');
+      updateReflection(id, {
+        date: rDateEl ? rDateEl.value || todayStr() : todayStr(),
+        purpose: rPurEl ? rPurEl.value.trim() : '',
+        feeling: rFeelEl ? rFeelEl.value.trim() : '',
+        hansei: rHanEl ? rHanEl.value.trim() : '',
+        naisei: rNaiEl ? rNaiEl.value.trim() : ''
+      });
+    }
     else if(action==='gen-week-summary'){ generateWeeklySummary(el.getAttribute('data-week')); }
     else if(action==='toggle-week-summary'){
       var wkKey = el.getAttribute('data-week');
@@ -1836,6 +1868,23 @@
     var result = storageSet('reflections', state.reflections);
     if(result.ok){ showToast('削除しました'); }
     else { state.reflections = prev; showToast(result.message, 6000); }
+    render();
+  }
+
+  function updateReflection(id, fields){
+    var r = state.reflections.find(function(x){ return x.id===id; });
+    if(!r) return;
+    if(!fields.purpose && !fields.feeling && !fields.hansei && !fields.naisei){ showToast('いずれかの項目を入力してください'); return; }
+    var prevValues = {};
+    Object.keys(fields).forEach(function(k){ prevValues[k]=r[k]; r[k]=fields[k]; });
+    var result = storageSet('reflections', state.reflections);
+    if(result.ok){
+      state.reflectionEditOpen[id] = false;
+      showToast('振り返りを更新しました');
+    } else {
+      Object.keys(prevValues).forEach(function(k){ r[k]=prevValues[k]; });
+      showToast(result.message, 6000);
+    }
     render();
   }
 
